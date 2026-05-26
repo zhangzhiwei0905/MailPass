@@ -166,33 +166,73 @@ function showMessageDialog(title, message) {
 
 function showCodeTestDialog(title, payload) {
   dialogTitle.textContent = title;
+  const previousList = dialogBody.querySelector(".code-test-list");
+  const previousScrollTop = previousList ? previousList.scrollTop : 0;
   const results = payload.results || [];
+  const completed = results.filter((item) => ["ok", "error"].includes(item.status)).length;
+  const total = payload.total || results.length;
   const rows = results.map((item) => {
-    const status = item.ok ? "ok" : "error";
-    const detail = item.ok
-      ? (item.found ? `找到验证码 ${item.code || ""}` : "接口正常，暂未找到验证码")
-      : item.error || "收码测试失败";
+    const status = item.status || (item.ok ? "ok" : "pending");
+    const statusText = codeTestStatusLabel(status);
+    const detail = codeTestResultSummary(item);
+    const fullDetail = codeTestFullDetail(item);
     const message = item.message;
     return `
       <li class="code-test-row" data-status="${status}">
         <strong>${escapeHtml(item.email || "")}</strong>
-        <span data-tone="${status}">${item.ok ? "认证正常" : "认证异常"}</span>
-        <small>${escapeHtml(detail)}</small>
-        ${message ? `<small>最近匹配：${escapeHtml(message.subject || "")} · ${escapeHtml(formatTime(message.receivedAt || message.receivedDateTime || ""))}</small>` : ""}
-        <small>最近邮件 ${Number(item.recentCount || 0)} 封${item.cached ? " · 缓存" : ""}</small>
+        <span data-tone="${escapeHtml(status)}" title="${escapeHtml(fullDetail)}">${escapeHtml(statusText)}</span>
+        <small title="${escapeHtml(fullDetail)}">${escapeHtml(detail)}</small>
+        ${message ? `<small title="${escapeHtml(fullDetail)}">最近匹配：${escapeHtml(message.subject || "")} · ${escapeHtml(formatTime(message.receivedAt || message.receivedDateTime || ""))}</small>` : ""}
       </li>
     `;
   }).join("");
   dialogBody.innerHTML = `
     <div class="job-summary" data-status="${payload.failed ? "failed" : "completed"}">
       <div>
-        <p>收码测试完成：正常 ${payload.success || 0}，异常 ${payload.failed || 0}</p>
-        <span>调用首页验证码查询接口检测选中邮箱认证状态。</span>
+        <p>收码测试：${completed} / ${total}，正常 ${payload.success || 0}，异常 ${payload.failed || 0}</p>
+        <span>按顺序检测账号，账号之间保留调用间隔。</span>
       </div>
     </div>
     ${rows ? `<ol class="dialog-list code-test-list">${rows}</ol>` : ""}
   `;
   if (!testResultDialog.open) testResultDialog.showModal();
+  const nextList = dialogBody.querySelector(".code-test-list");
+  if (nextList) nextList.scrollTop = previousScrollTop;
+}
+
+function codeTestStatusLabel(status) {
+  const labels = {
+    pending: "等待中",
+    running: "测试中",
+    ok: "正常",
+    error: "异常",
+  };
+  return labels[status] || status || "等待中";
+}
+
+function codeTestResultSummary(item) {
+  const status = item.status || (item.ok ? "ok" : "pending");
+  if (status === "pending") return "等待开始";
+  if (status === "running") return "正在读取邮箱";
+  if (status === "ok") {
+    return item.found ? "可收码，已找到验证码" : `可读取邮箱，最近邮件 ${Number(item.recentCount || 0)} 封`;
+  }
+  return "认证信息异常或读取失败";
+}
+
+function codeTestFullDetail(item) {
+  const lines = [
+    item.email || "",
+    codeTestResultSummary(item),
+  ];
+  if (item.error) lines.push(`错误：${item.error}`);
+  if (item.message?.subject) lines.push(`最近匹配：${item.message.subject}`);
+  if (Number.isFinite(Number(item.recentCount))) lines.push(`最近邮件：${Number(item.recentCount || 0)} 封`);
+  return lines.filter(Boolean).join("\n");
+}
+
+function sleep(milliseconds) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
 async function exportEmails(emails, mode = "download") {
@@ -248,18 +288,50 @@ async function testSelectedEmailCodes(emails) {
     setStatus("请先选择要测试收码的邮箱。", "warn");
     return;
   }
-  showCodeTestDialog("选中邮箱收码测试", { results: [], success: 0, failed: 0 });
-  setStatus(`收码测试中：共 ${emails.length} 个邮箱，账号之间已做间隔控制。`);
-  const response = await fetch("/api/admin/outlook/code-tests", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ emails, intervalSeconds: 1 }),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.detail || "收码测试失败。");
+  const results = emails.map((email) => ({
+    email,
+    status: "pending",
+    ok: false,
+    recentCount: 0,
+  }));
+  const payload = { results, total: emails.length, success: 0, failed: 0 };
+  showCodeTestDialog("选中邮箱收码测试", payload);
+  setStatus(`收码测试中：共 ${emails.length} 个邮箱，按顺序执行。`);
+  for (let index = 0; index < emails.length; index += 1) {
+    const email = emails[index];
+    results[index] = { ...results[index], status: "running" };
+    showCodeTestDialog("选中邮箱收码测试", payload);
+    setStatus(`收码测试中：${index + 1} / ${emails.length}，当前 ${email}`);
+    try {
+      const response = await fetch("/api/admin/outlook/code-tests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emails: [email], intervalSeconds: 0 }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.detail || "收码测试失败。");
+      const result = (body.results || [])[0] || { email, ok: false, error: "没有返回测试结果。" };
+      results[index] = {
+        email,
+        ...result,
+        status: result.ok ? "ok" : "error",
+      };
+    } catch (error) {
+      results[index] = {
+        email,
+        ok: false,
+        status: "error",
+        error: error.message || "网络请求失败。",
+        recentCount: 0,
+      };
+    }
+    payload.success = results.filter((item) => item.status === "ok").length;
+    payload.failed = results.filter((item) => item.status === "error").length;
+    showCodeTestDialog("选中邮箱收码测试", payload);
+    if (index < emails.length - 1) await sleep(1000);
+  }
   const success = payload.success || 0;
   const failed = payload.failed || 0;
-  showCodeTestDialog("选中邮箱收码测试", payload);
   setStatus(`收码测试完成：正常 ${success}，异常 ${failed}。`, failed ? "warn" : "ok");
   await loadOutlookAccounts();
 }

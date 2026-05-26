@@ -1057,6 +1057,29 @@ li small {
   color: var(--error);
 }
 
+.dialog-list span[data-tone="pending"] {
+  color: var(--muted);
+}
+
+.dialog-list span[data-tone="running"] {
+  color: var(--accent);
+}
+
+.code-test-list {
+  display: grid;
+  gap: 8px;
+  padding-left: 0;
+  list-style: none;
+}
+
+.code-test-row small {
+  color: var(--muted);
+}
+
+.code-test-row[data-status="error"] small {
+  color: var(--error);
+}
+
 .chatgpt-job-list {
   display: grid;
   gap: 10px;
