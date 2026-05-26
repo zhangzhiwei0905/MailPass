@@ -1,0 +1,12 @@
+.venv
+__pycache__
+*.pyc
+tests
+.git
+.omx
+AGENTS.md
+.env
+.env.*
+!.env.example
+.DS_Store
+._*

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailPass</title>
+  <link rel="icon" href="/static/assets/mailpass-icon-64.png" type="image/png">
+  <link rel="apple-touch-icon" href="/static/assets/mailpass-icon-192.png">
+  <link rel="stylesheet" href="/static/styles.css?v=mailpass-20260526-2">
+</head>
+
+<body>
+  <main class="shell">
+    <section class="hero" aria-labelledby="page-title">
+      <div class="brand-lockup" aria-label="MailPass">
+        <img class="brand-mark" src="/static/assets/mailpass-icon-192.png" alt="MailPass 图标">
+        <span class="brand-name">MailPass</span>
+      </div>
+      <h1 id="page-title" class="visually-hidden">MailPass</h1>
+      <form id="query-form" class="query-form">
+        <label class="field">
+          <span>邮箱地址 / 别名</span>
+          <input id="email-input" name="email" type="text" autocomplete="off"
+            placeholder="请输入邮箱或别名" required>
+        </label>
+        <button id="query-button" type="submit">查询</button>
+      </form>
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+    </section>
+
+    <section id="result" class="result hidden" aria-label="查询结果">
+      <div class="code-panel">
+        <div class="code-main">
+          <span class="code-label">验证码</span>
+          <div class="code-line">
+            <strong id="code-value">--</strong>
+            <button id="copy-code-button" class="icon-button" type="button" aria-label="复制验证码" title="复制验证码">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="9" y="9" width="11" height="11" rx="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="code-side">
+          <small id="provider-value">--</small>
+          <dl class="message-meta">
+            <div>
+              <dt>主题</dt>
+              <dd id="message-subject">--</dd>
+            </div>
+            <div>
+              <dt>发件人</dt>
+              <dd id="message-from">--</dd>
+            </div>
+            <div>
+              <dt>收件人</dt>
+              <dd id="message-recipient">--</dd>
+            </div>
+            <div>
+              <dt>时间</dt>
+              <dd id="message-time">--</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <section id="recent" class="recent hidden" aria-label="最近邮件">
+      <h2>最近邮件</h2>
+      <ol id="recent-list"></ol>
+    </section>
+  </main>
+  <a class="admin-link" href="/admin" aria-label="管理员入口">Admin</a>
+  <script src="/static/main.js?v=mailpass-20260526-2"></script>
+</body>
+
+</html>
