@@ -39,6 +39,17 @@ from app import (  # noqa: E402
 )
 
 
+class StaticAssetRegressionTest(unittest.TestCase):
+    def test_admin_copy_email_button_preserves_svg_icon_after_click(self):
+        admin_js = (Path(__file__).resolve().parents[1] / "static" / "admin.js").read_text(encoding="utf-8")
+        click_handler = admin_js.split('outlookAccountsBody.addEventListener("click"', 1)[1]
+        click_handler = click_handler.split('outlookAccountsBody.addEventListener("change"', 1)[0]
+
+        self.assertIn("const originalContent = button.innerHTML;", click_handler)
+        self.assertIn("button.innerHTML = originalContent;", click_handler)
+        self.assertNotIn("button.textContent = originalText;", click_handler)
+
+
 class EduMailHelpersTest(unittest.TestCase):
     def test_normalize_api_token_accepts_bearer_header(self):
         self.assertEqual(

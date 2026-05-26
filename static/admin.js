@@ -596,7 +596,7 @@ outlookAccountsBody.addEventListener("click", async (event) => {
   const row = event.target.closest("tr");
   if (!button || !row?.dataset.email) return;
   const email = row.dataset.email;
-  const originalText = button.textContent;
+  const originalContent = button.innerHTML;
   button.disabled = true;
   try {
     if (button.dataset.action === "copy") {
@@ -626,7 +626,7 @@ outlookAccountsBody.addEventListener("click", async (event) => {
   } catch (error) {
     setStatus(error.message, "error");
   } finally {
-    button.textContent = originalText;
+    button.innerHTML = originalContent;
     button.disabled = false;
   }
 });
