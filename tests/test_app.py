@@ -225,6 +225,31 @@ class EduMailHelpersTest(unittest.TestCase):
 
         self.assertEqual(state, "verification")
 
+    def test_chatgpt_page_classifier_detects_cloudflare_challenge_url(self):
+        class FakePage:
+            url = "https://chatgpt.com/auth/login?__cf_chl_rt_tk=challenge-token"
+
+            def locator(self, selector):
+                return FakeLocator(selector)
+
+        class FakeLocator:
+            def __init__(self, selector):
+                self.selector = selector
+
+            @property
+            def first(self):
+                return self
+
+            async def is_visible(self, timeout=1000):
+                return False
+
+            async def inner_text(self, timeout=3000):
+                return ""
+
+        state = __import__("asyncio").run(classify_chatgpt_page(FakePage()))
+
+        self.assertEqual(state, "challenge")
+
     def test_public_outlook_account_includes_chatgpt_plan_status(self):
         account = normalize_outlook_account({
             "email": "user@outlook.com",

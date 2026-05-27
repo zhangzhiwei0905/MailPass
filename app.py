@@ -1014,6 +1014,17 @@ def chatgpt_status_message(status: str, reason: str = "") -> str:
     return f"{label}：{reason}" if reason else label
 
 
+CHATGPT_BROWSER_CHALLENGE_REASON = "ChatGPT 登录页触发 Cloudflare / 浏览器验证，当前自动检测不会绕过该挑战。"
+
+
+def is_chatgpt_browser_challenge_url(url: str) -> bool:
+    lowered = str(url or "").lower()
+    return any(marker in lowered for marker in (
+        "__cf_chl_rt_tk",
+        "/cdn-cgi/challenge-platform/",
+    ))
+
+
 async def fetch_chatgpt_session_plan(page: Any) -> Tuple[str, str]:
     try:
         response = await page.request.get("https://chatgpt.com/api/auth/session", timeout=30000)
@@ -1154,6 +1165,24 @@ async def default_chatgpt_login_runner(
             report("browser", "打开 ChatGPT 登录页")
             await page.goto("https://chatgpt.com/auth/login", wait_until="domcontentloaded", timeout=timeout_ms)
             await report_chatgpt_snapshot(page, "browser", email_label, progress, "登录页快照：")
+            current_stage = "browser_wait"
+            report("browser_wait", "确认登录页可输入邮箱")
+            entry_state = await wait_for_chatgpt_state(
+                page,
+                {"email", "challenge"},
+                min(timeout_ms, 30000),
+                progress=progress,
+                progress_stage="browser_wait",
+                email_label=email_label,
+            )
+            if entry_state == "challenge":
+                await report_chatgpt_snapshot(page, "challenge", email_label, progress, "登录页挑战快照：")
+                return ChatGPTLoginResult(status="challenge", reason=CHATGPT_BROWSER_CHALLENGE_REASON, stage="challenge")
+            if entry_state != "email":
+                await report_chatgpt_snapshot(page, entry_state or "unknown", email_label, progress, "登录页未识别快照：")
+                excerpt = await visible_page_excerpt(page)
+                reason = f"登录页状态未识别：{entry_state or 'unknown'}。{excerpt}".strip()
+                return ChatGPTLoginResult(status="browser_error", reason=reason[:500], stage=entry_state or "unknown")
             current_stage = "email"
             report("email", "提交邮箱")
             await submit_chatgpt_identifier(page, email, timeout_ms)
@@ -1243,6 +1272,10 @@ async def default_chatgpt_login_runner(
         except HTTPException:
             raise
         except Exception as exc:
+            with contextlib.suppress(Exception):
+                if await classify_chatgpt_page(page) == "challenge":
+                    await report_chatgpt_snapshot(page, "challenge_error", email_label, progress, "异常时挑战页快照：")
+                    return ChatGPTLoginResult(status="challenge", reason=CHATGPT_BROWSER_CHALLENGE_REASON, stage="challenge")
             logger.warning("chatgpt_login_browser_error email=%s stage=%s error=%s", email_label, current_stage, str(exc)[:500])
             return ChatGPTLoginResult(status="browser_error", reason=f"{current_stage}: {str(exc)}"[:500], stage=current_stage or "browser")
         finally:
@@ -1313,6 +1346,8 @@ async def report_chatgpt_snapshot(
 
 async def classify_chatgpt_page(page: Any) -> str:
     url = str(page.url or "").lower()
+    if is_chatgpt_browser_challenge_url(url):
+        return "challenge"
     text = (await visible_page_excerpt(page)).lower()
     if re.search(r"deleted|deactivated|suspended|disabled|banned|account.*closed|年龄|停用|封禁|删除", text):
         return "blocked"
